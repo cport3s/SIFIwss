@@ -10,6 +10,7 @@ from click import command
 from dash import Dash, Input, Output, callback, dash_table
 from dash import Dash, dcc, html, callback_context, State
 from dash.dependencies import Input, Output
+from dash.exceptions import PreventUpdate
 import classes
 import mysql.connector
 from dash import Dash, dash_table
@@ -114,6 +115,20 @@ def pingdef(ip):
     response_list = ping(ip,count=10)
     return response_list.rtt_avg_ms
 
+def dbConnectionFunction():
+    # Connect to DB
+    connectr = mysql.connector.connect(user = dbPara.dbUsername, password = dbPara.dbPassword, host = dbPara.dbServerIp , database = dbPara.dataTable)
+    # Connection must be buffered when executing multiple querys on DB before closing connection.
+    pointer = connectr.cursor(buffered=True)
+    pointer.execute('SELECT * FROM agents;')
+    queryRaw = pointer.fetchall()
+    # Transform the query payload into a dataframe
+    queryPayload = np.array(queryRaw)
+    df = pd.DataFrame(queryPayload, columns=['idagents', 'ubicacion', 'ip', 'weburl', 'sshurl', 'agentname','connection'])
+    pointer.close()
+    connectr.close()
+    return df
+
 # Connect to DB
 connectr = mysql.connector.connect(user = dbPara.dbUsername, password = dbPara.dbPassword, host = dbPara.dbServerIp , database = dbPara.dataTable)
 # Connection must be buffered when executing multiple querys on DB before closing connection.
@@ -123,6 +138,8 @@ queryRaw = pointer.fetchall()
 # Transform the query payload into a dataframe
 queryPayload = np.array(queryRaw)
 df = pd.DataFrame(queryPayload, columns=['idagents', 'ubicacion', 'ip', 'weburl', 'sshurl', 'agentname','connection'])
+pointer.close()
+connectr.close()
 
 # Define Up or DOW in DataTaFrame
 def LatencyRating():
@@ -197,7 +214,7 @@ app.layout = html.Div(
         # Tabbed menu
         dcc.Tabs(
             id="tabs-styled-with-inline", 
-            value='tab-1', 
+            value='tab-2', 
             className='dark-theme-control', 
             children=[
                 dcc.Tab(
@@ -238,6 +255,7 @@ app.layout = html.Div(
                 # Tab1 Content
                 html.Div(
                     id = 'tab1ContentDiv',
+                    style = tabbedMenu_contentStyles.tab1MenuContent,
                     children = [
                         html.H1('Welcome to Sifi WSS')
                     ]
@@ -245,6 +263,7 @@ app.layout = html.Div(
                 # Tab2 Content
                 html.Div(
                     id = 'tab2ContentDiv',
+                    style = tabbedMenu_contentStyles.tab2MenuContent,
                     children = [
                         dash_table.DataTable(
                             id = 'tab2DataTable1',
@@ -262,6 +281,7 @@ app.layout = html.Div(
                 # Tab3 Content
                 html.Div(
                     id = 'tab3ContentDiv',
+                    style = tabbedMenu_contentStyles.tab3MenuContent,
                     children = [
                         html.H3('Sifi Agent 64.2: SSID list'),
                         html.H4(        
@@ -289,6 +309,7 @@ app.layout = html.Div(
                 # Tab4 Content
                 html.Div(
                     id = 'tab4ContentDiv',
+                    style = tabbedMenu_contentStyles.tab4MenuContent,
                     children = [
                         html.H3('Select Your Target ESSID and BSSID'),
                         dcc.Dropdown(
@@ -302,6 +323,7 @@ app.layout = html.Div(
                 # Tab5 Content
                 html.Div(
                     id = 'tab5ContentDiv',
+                    style = tabbedMenu_contentStyles.tab5MenuContent,
                     children = [
                         html.H4(
                             dash_table.DataTable(
@@ -336,7 +358,8 @@ app.layout = html.Div(
         dcc.Dropdown(
             df.ip.unique(), 
             id='pandas-dropdown-1', 
-            placeholder="Select SifiAgent"
+            placeholder="Select SifiAgent",
+            value = '100.64.0.2'
         ),
         dcc.Dropdown(
             [
@@ -380,9 +403,9 @@ def update_output( value):
 # Callback to update tab2 content
 @app.callback(
     [
-        Output('tab2DataTable1', 'value'),
+        Output('tab2DataTable1', 'data'),
         Output('tab2DataTable1', 'columns')
-    ]
+    ],
     [
         Input('tabs-styled-with-inline', 'value'), 
         Input('submitButton', 'n_clicks')
@@ -396,17 +419,21 @@ def render_content_tab2(tab, callbackContext):
     if button_id == 'submitButton' and tab == 'tab-2':
         LatencyRating()
     elif tab == 'tab-2':
+        df = dbConnectionFunction()
+        print(df)
         columns = [{"name": i, "id": i, 'type': "text", 'presentation':'markdown'} for i in df.columns ]
         data = df.to_dict('records')
         return data, columns
+    else:
+        raise PreventUpdate
 
 # Callback to update tab3 content
 @app.callback(
     [
-        Output('tab3DataTable1', 'value'),
-        Output('tab3DataTable2', 'value'),
-        Output('tab3DataTable3', 'value')
-    ]
+        Output('tab3DataTable1', 'data'),
+        Output('tab3DataTable2', 'data'),
+        Output('tab3DataTable3', 'data')
+    ],
     [
         Input('tabs-styled-with-inline', 'value'), 
         Input('submitButton', 'n_clicks')
@@ -429,13 +456,15 @@ def render_content_tab3(tab, callbackContext):
         dataTable2Value = pd.DataFrame().to_dict('records')
         dataTable3Value = pd.DataFrame().to_dict('records')
         return dataTable1Value, dataTable2Value, dataTable3Value
+    else:
+        raise PreventUpdate
 
 # Callback to update tab4 content
 @app.callback(
     [
         Output('drpDown2', 'options'),
         Output('drpDown3', 'options')
-    ]
+    ],
     [
         Input('tabs-styled-with-inline', 'value'), 
         Input('pandas-dropdown-1', 'value')
@@ -451,10 +480,12 @@ def render_content_tab4(tab, DropDownDevvalue):
         dfra2 = dfra.iloc[:,0]
         dfra3 = dfra.iloc[:,13]
         return dfra2, dfra3
+    else:
+        raise PreventUpdate
 
 # Callback to update tab5 content
 @app.callback(
-    Output('tab5DatatableData', 'value'),
+    Output('tab5DatatableData', 'data'),
     [
         Input('tabs-styled-with-inline', 'value'), 
         Input('submitButton', 'n_clicks'),
@@ -471,16 +502,20 @@ def render_content_tab5(tab, callbackContext, DropDownDevvalue):
         if DropDownDevvalue == "100.64.0.4":
             toSSH2("100.64.0.4", "wlan0mon")
             data = read_csv_sftp("100.64.0.4", "kali", "/home/kali/Reports/wifi_networks/wifi_last-01.csv", "sifi2224").to_dict('records')
+            return data
         elif DropDownDevvalue =="100.64.0.2":
             toSSH2("100.64.0.2", "wlan1mon")
-            data = read_csv_sftp("100.64.0.2", "kali", "/home/kali/Reports/wifi_networks/wifi_last-01.csv", "kali").to_dict('records')      
+            data = read_csv_sftp("100.64.0.2", "kali", "/home/kali/Reports/wifi_networks/wifi_last-01.csv", "kali").to_dict('records')
+            return data
     elif tab == 'tab-5':
         if DropDownDevvalue == "100.64.0.4":
             passwordDev = "sifi2224"
         else:
             passwordDev = "kali"
         data = read_csv_sftp(DropDownDevvalue, "kali", "/home/kali/Reports/wifi_networks/wifi_last-01.csv", passwordDev).to_dict('records')
-    return data
+        return data
+    else:
+        raise PreventUpdate
 
 # Callback to hide/display Tabbed menu content
 @app.callback(
@@ -495,42 +530,46 @@ def render_content_tab5(tab, callbackContext, DropDownDevvalue):
 )
 def showTabContainer(selectedTab):
     # Instantiate tabbed content styles
-    tab1Style = tabbedMenu_contentStyles.tabbedMenuContent
-    tab2Style = tabbedMenu_contentStyles.tabbedMenuContent
-    tab3Style = tabbedMenu_contentStyles.tabbedMenuContent
-    tab4Style = tabbedMenu_contentStyles.tabbedMenuContent
-    tab5Style = tabbedMenu_contentStyles.tabbedMenuContent
+    tab1Style = tabbedMenu_contentStyles.tab1MenuContent
+    tab2Style = tabbedMenu_contentStyles.tab2MenuContent
+    tab3Style = tabbedMenu_contentStyles.tab3MenuContent
+    tab4Style = tabbedMenu_contentStyles.tab4MenuContent
+    tab5Style = tabbedMenu_contentStyles.tab5MenuContent
     if selectedTab == 'tab-1':
-        tab1Style['display'] = 'inline'
+        tab1Style['display'] = 'block'
         tab2Style['display'] = 'none'
         tab3Style['display'] = 'none'
         tab4Style['display'] = 'none'
         tab5Style['display'] = 'none'
+        return tab1Style, tab2Style, tab3Style, tab4Style, tab5Style
     elif selectedTab == 'tab-2':
         tab1Style['display'] = 'none'
-        tab2Style['display'] = 'inline'
+        tab2Style['display'] = 'block'
         tab3Style['display'] = 'none'
         tab4Style['display'] = 'none'
         tab5Style['display'] = 'none'
+        return tab1Style, tab2Style, tab3Style, tab4Style, tab5Style
     elif selectedTab == 'tab-3':
         tab1Style['display'] = 'none'
         tab2Style['display'] = 'none'
-        tab3Style['display'] = 'inline'
+        tab3Style['display'] = 'block'
         tab4Style['display'] = 'none'
         tab5Style['display'] = 'none'
+        return tab1Style, tab2Style, tab3Style, tab4Style, tab5Style
     elif selectedTab == 'tab-4':
         tab1Style['display'] = 'none'
         tab2Style['display'] = 'none'
         tab3Style['display'] = 'none'
-        tab4Style['display'] = 'inline'
+        tab4Style['display'] = 'block'
         tab5Style['display'] = 'none'
+        return tab1Style, tab2Style, tab3Style, tab4Style, tab5Style
     else:
         tab1Style['display'] = 'none'
         tab2Style['display'] = 'none'
         tab3Style['display'] = 'none'
         tab4Style['display'] = 'none'
-        tab5Style['display'] = 'inline'
-    return tab1Style, tab2Style, tab3Style, tab4Style, tab5Style
+        tab5Style['display'] = 'block'
+        return tab1Style, tab2Style, tab3Style, tab4Style, tab5Style
 
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0', port='5007', dev_tools_silence_routes_logging=False)
