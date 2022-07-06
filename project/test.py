@@ -137,12 +137,13 @@ pointer.execute('SELECT * FROM agents;')
 queryRaw = pointer.fetchall()
 # Transform the query payload into a dataframe
 queryPayload = np.array(queryRaw)
-df = pd.DataFrame(queryPayload, columns=['idagents', 'ubicacion', 'ip', 'weburl', 'sshurl', 'agentname','connection'])
+#df = pd.DataFrame(queryPayload, columns=['idagents', 'ubicacion', 'ip', 'weburl', 'sshurl', 'agentname','connection'])
 pointer.close()
 connectr.close()
 
 # Define Up or DOW in DataTaFrame
 def LatencyRating():
+    df = dbConnectionFunction()
     df['connection'] = df['ip'].apply(
         lambda x:
             'DOWN' if check_ping(x) == False else('UP')
@@ -154,7 +155,7 @@ def LatencyRating():
             if check_ping(x) == True else ('0')
         )
     #Rating de la conexions de los Sifi AGENTS desde el server.
-    if check_ping("100.64.0.2") == True and check_ping("100.64.0.4") == True and check_ping("100.64.0.77")  == True:
+    if check_ping("100.64.0.2") == True and check_ping("100.64.0.4")  == True:
         df['Rating'] = df['ip'].apply(
             lambda x:
             '⭐⭐⭐' if pingdef(x) < 15 else (
@@ -163,6 +164,7 @@ def LatencyRating():
                 )
             )
         )
+    return df
 
 def SSIDDataTable():
     return html.Div([ html.H3('Sifi Agent 64.2: SSID list'),
@@ -356,7 +358,7 @@ app.layout = html.Div(
             className='dark-theme-control'
         ),
         dcc.Dropdown(
-            df.ip.unique(), 
+            dbConnectionFunction().ip.unique(), 
             id='pandas-dropdown-1', 
             placeholder="Select SifiAgent",
             value = '100.64.0.2'
@@ -417,7 +419,10 @@ def render_content_tab2(tab, callbackContext):
     # Get button ID
     button_id = callbackContext.triggered[0]['prop_id'].split('.')[0]
     if button_id == 'submitButton' and tab == 'tab-2':
-        LatencyRating()
+        df = LatencyRating()
+        columns = [{"name": i, "id": i, 'type': "text", 'presentation':'markdown'} for i in df.columns ]
+        data = df.to_dict('records')
+        return data, columns
     elif tab == 'tab-2':
         df = dbConnectionFunction()
         print(df)
@@ -452,8 +457,8 @@ def render_content_tab3(tab, callbackContext):
         dataTable3Value = read_csv_sftp("100.64.0.77", "kali", "/home/kali/Reports/wifi_networks/basic.wifi.csv", "kali").to_dict('records')
         return dataTable1Value, dataTable2Value, dataTable3Value
     elif tab == 'tab-3':
-        dataTable1Value = read_csv_sftp("100.64.0.1", "ittadmin", "/home/ittadmin/Reports/basic.wifi.csv", "L1br0Sh@rkR1ng").to_dict('records')
-        dataTable2Value = pd.DataFrame().to_dict('records')
+        dataTable1Value = read_csv_sftp("100.64.0.1", "ittadmin", "/home/ittadmin/Reports/wifi_networks/100.64.0.2/basic.wifi.csv", "L1br0Sh@rkR1ng").to_dict('records')
+        dataTable2Value = read_csv_sftp("100.64.0.1", "ittadmin", "/home/ittadmin/Reports/wifi_networks/100.64.0.4/basic.wifi.csv", "L1br0Sh@rkR1ng").to_dict('records')
         dataTable3Value = pd.DataFrame().to_dict('records')
         return dataTable1Value, dataTable2Value, dataTable3Value
     else:
